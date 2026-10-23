@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全能物理受力分析计算器</title>
+    <style>
+        :root { --primary-color: #2563eb; --bg-color: #f8fafc; --card-bg: #ffffff; --text-color: #334155; --border-color: #e2e8f0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg-color); color: var(--text-color); line-height: 1.6; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: var(--card-bg); padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        h1, h2, h3 { color: #1e293b; margin-bottom: 15px; }
+        .form-group { margin-bottom: 15px; display: none; } /* 默认隐藏，由JS控制显示 */
+        label { display: block; font-weight: bold; margin-bottom: 5px; }
+        input, select { width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 16px; box-sizing: border-box; }
+        button { background-color: var(--primary-color); color: white; padding: 12px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%; margin-top: 10px; transition: background 0.3s; }
+        button:hover { background-color: #1d4ed8; }
+        .result-box { margin-top: 20px; padding: 20px; background-color: #eff6ff; border-left: 5px solid var(--primary-color); border-radius: 0 6px 6px 0; display: none; }
+        .formula-box { margin-top: 30px; padding: 20px; background-color: #f1f5f9; border-radius: 6px; font-size: 14px; }
+        .formula-box code { background: #e2e8f0; padding: 2px 5px; border-radius: 3px; font-family: monospace; }
+        .step { margin-bottom: 10px; padding-left: 10px; border-left: 2px solid #cbd5e1; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>⚙️ 全能物理受力分析计算器</h1>
+    <p>支持斜面/水平面多场景，可求加速度、外力、摩擦系数。</p>
+
+    <!-- 1. 选择场景 -->
+    <div class="form-group" style="display:block;">
+        <label for="scenario">1. 选择物理场景：</label>
+        <select id="scenario" onchange="updateUI()">
+            <option value="incline">斜面 (受重力、支持力、摩擦力、外力)</option>
+            <option value="horizontal">水平面 (受斜向上拉力 / 斜向下推力)</option>
+        </select>
+    </div>
+
+    <!-- 2. 选择求解目标 -->
+    <div class="form-group" style="display:block;">
+        <label for="target">2. 你需要计算什么？</label>
+        <select id="target" onchange="updateUI()">
+            <option value="acc">求加速度 (a)</option>
+            <option value="force">求外力大小 (F)</option>
+            <option value="mu">求动摩擦系数 (μ)</option>
+        </select>
+    </div>
+
+    <!-- 3. 动态输入区 -->
+    <div class="form-group" id="grp_mass"><label for="mass">质量 m (kg):</label><input type="number" id="mass" step="0.1" placeholder="例如: 16"></div>
+    <div class="form-group" id="grp_angle"><label for="angle">角度 θ (°):</label><input type="number" id="angle" step="1" placeholder="斜面倾角或拉力/推力与水平面的夹角"></div>
+    <div class="form-group" id="grp_mu"><label for="mu">动摩擦系数 μ:</label><input type="number" id="mu" step="0.01" placeholder="例如: 0.40"></div>
+    <div class="form-group" id="grp_force"><label for="force">外力 F (N):</label><input type="number" id="force" step="1" placeholder="沿斜面的力 或 水平面上的拉力/推力"></div>
+    <div class="form-group" id="grp_acc"><label for="acc">加速度 a (m/s²):</label><input type="number" id="acc" step="0.01" placeholder="例如: 1.5"></div>
+    
+    <!-- 水平面特有：力的方向 -->
+    <div class="form-group" id="grp_dir">
+        <label for="force_direction">力的方向:</label>
+        <select id="force_direction">
+            <option value="pull">斜向上拉</option>
+            <option value="push">斜向下推</option>
+        </select>
+    </div>
+
+    <button onclick="calculate()">🚀 开始计算</button>
+    <div id="result" class="result-box"></div>
+
+    <div class="formula-box">
+        <h3>📚 核心知识点与常用公式</h3>
+        <p><strong>1. 力的正交分解：</strong></p>
+        <ul>
+            <li>斜面重力分解：沿斜面 <code>Gx = mg·sinθ</code>，垂直斜面 <code>Gy = mg·cosθ</code></li>
+            <li>水平力分解：水平 <code>Fx = F·cosθ</code>，竖直 <code>Fy = F·sinθ</code></li>
+        </ul>
+        <p><strong>2. 摩擦力计算：</strong> <code>f = μ·N</code> (注意：N为实际正压力，非重力！)</p>
+        <p><strong>3. 牛顿第二定律：</strong> <code>ΣF = m·a</code></p>
+    </div>
+</div>
+
+<script>
+    const g = 9.8;
+    // 动态显示/隐藏输入框
+    function updateUI() {
+        const scenario = document.getElementById('scenario').value;
+        const target = document.getElementById('target').value;
+
+        // 基础字段始终显示
+        ['grp_mass', 'grp_angle'].forEach(id => document.getElementById(id).style.display = 'block');
+
+        // 根据目标决定哪些字段需要输入
+        document.getElementById('grp_mu').style.display = target !== 'mu' ? 'block' : 'none';
+        document.getElementById('grp_force').style.display = target !== 'force' ? 'block' : 'none';
+        document.getElementById('grp_acc').style.display = target !== 'acc' ? 'block' : 'none';
+
+        // 水平面特有字段
+        document.getElementById('grp_dir').style.display = scenario === 'horizontal' ? 'block' : 'none';
+    }
+
+    function calculate() {
+        const m = parseFloat(document.getElementById('mass').value);
+        const thetaDeg = parseFloat(document.getElementById('angle').value);
+        const scenario = document.getElementById('scenario').value;
+        const target = document.getElementById('target').value;
+
+        if (isNaN(m) || isNaN(thetaDeg)) { alert("请确保质量和角度已填写！"); return; }
+
+        const theta = thetaDeg * Math.PI / 180;
+        const sinT = Math.sin(theta);
+        const cosT = Math.cos(theta);
+        const weight = m * g;
+        let steps = [];
+        let answer = "";
+
+        steps.push(`<strong>已知条件：</strong> m=${m}kg, θ=${thetaDeg}°, g=${g}m/s²`);
+        steps.push(`重力 G = mg = ${weight.toFixed(2)} N`);
+
+        if (scenario === 'incline') {
+            // ================= 斜面场景 =================
+            const Gx = weight * sinT;
+            const Gy = weight * cosT;
+            steps.push(`<div class="step">1. 重力分解：沿斜面 Gx = mg·sinθ = ${Gx.toFixed(2)} N；垂直斜面 Gy = mg·cosθ = ${Gy.toFixed(2)} N</div>`);
+
+            if (target === 'acc') {
+                const F = parseFloat(document.getElementById('force').value) || 0;
+                const mu = parseFloat(document.getElementById('mu').value);
+                if (isNaN(mu)) { alert("请填入摩擦系数！"); return; }
+                
+                const N = Gy; // 假设没有额外垂直外力
+                const f = mu * N;
+                steps.push(`<div class="step">2. 垂直斜面平衡：支持力 N = Gy = ${N.toFixed(2)} N</div>`);
+                steps.push(`<div class="step">3. 滑动摩擦力：f = μ·N = ${f.toFixed(2)} N</div>`);
+                
+                const F_net = F - Gx - f;
+                const a = F_net / m;
+                steps.push(`<div class="step">4. 沿斜面合力：ΣF = F_外 - Gx - f = ${F_net.toFixed(2)} N</div>`);
+                steps.push(`<div class="step">5. 牛顿第二定律：a = ΣF / m = <strong>${a.toFixed(3)} m/s²</strong></div>`);
+                answer = `加速度 a = ${a.toFixed(3)} m/s²`;
+
+            } else if (target === 'force') {
+                const a = parseFloat(document.getElementById('acc').value);
+                const mu = parseFloat(document.getElementById('mu').value);
+                if (isNaN(a) || isNaN(mu)) { alert("请填入加速度和摩擦系数！"); return; }
+
+                const N = Gy;
+                const f = mu * N;
+                steps.push(`<div class="step">2. 垂直斜面平衡：支持力 N = Gy = ${N.toFixed(2)} N</div>`);
+                steps.push(`<div class="step">3. 滑动摩擦力：f = μ·N = ${f.toFixed(2)} N</div>`);
+                
+                // F - Gx - f = ma  => F = ma + Gx + f
+                const F = m * a + Gx + f;
+                steps.push(`<div class="step">4. 逆推外力：F = ma + Gx + f = ${(m*a).toFixed(2)} + ${Gx.toFixed(2)} + ${f.toFixed(2)} = <strong>${F.toFixed(2)} N</strong></div>`);
+                answer = `所需外力 F = ${F.toFixed(2)} N`;
+
+            } else if (target === 'mu') {
+                const F = parseFloat(document.getElementById('force').value) || 0;
+                const a = parseFloat(document.getElementById('acc').value);
+                if (isNaN(a)) { alert("请填入加速度！"); return; }
+
+                const N = Gy;
+                steps.push(`<div class="step">2. 垂直斜面平衡：支持力 N = Gy = ${N.toFixed(2)} N</div>`);
+                
+                // F - Gx - μN = ma => μ = (F - Gx - ma) / N
+                const mu = (F - Gx - m * a) / N;
+                steps.push(`<div class="step">3. 逆推摩擦系数：ΣF = F - Gx - f = ma => f = F - Gx - ma</div>`);
+                steps.push(`<div class="step">4. μ = f / N = (F - Gx - ma) / N = <strong>${mu.toFixed(4)}</strong></div>`);
+                answer = `动摩擦系数 μ = ${mu.toFixed(4)}`;
+            }
+
+        } else {
+            // ================= 水平面场景 =================
+            const F = parseFloat(document.getElementById('force').value);
+            const dir = document.getElementById('force_direction').value;
+            if (isNaN(F)) { alert("请输入外力大小！"); return; }
+
+            const Fx = F * cosT;
+            const Fy = F * sinT;
+            steps.push(`<div class="step">1. 外力分解：水平 Fx = F·cosθ = ${Fx.toFixed(2)} N；竖直 Fy = F·sinθ = ${Fy.toFixed(2)} N</div>`);
+
+            let N;
+            if (dir === 'pull') {
+                N = weight - Fy;
+                steps.push(`<div class="step">2. 竖直受力平衡：斜向上拉，支持力 N = mg - Fy = ${N.toFixed(2)} N</div>`);
+            } else {
+                N = weight + Fy;
+                steps.push(`<div class="step">2. 竖直受力平衡：斜向下推，支持力 N = mg + Fy = ${N.toFixed(2)} N</div>`);
+            }
+
+            if (target === 'acc') {
+                const mu = parseFloat(document.getElementById('mu').value);
+                if (isNaN(mu)) { alert("请填入摩擦系数！"); return; }
+                const f = mu * N;
+                steps.push(`<div class="step">3. 滑动摩擦力：f = μ·N = ${f.toFixed(2)} N</div>`);
+                const F_net = Fx - f;
+                const a = F_net / m;
+                steps.push(`<div class="step">4. 水平合力：ΣF = Fx - f = ${F_net.toFixed(2)} N</div>`);
+                steps.push(`<div class="step">5. 牛顿第二定律：a = ΣF / m = <strong>${a.toFixed(3)} m/s²</strong></div>`);
+                answer = `加速度 a = ${a.toFixed(3)} m/s²`;
+
+            } else if (target === 'force') {
+                const a = parseFloat(document.getElementById('acc').value);
+                const mu = parseFloat(document.getElementById('mu').value);
+                if (isNaN(a) || isNaN(mu)) { alert("请填入加速度和摩擦系数！"); return; }
+                const f = mu * N;
+                steps.push(`<div class="step">3. 滑动摩擦力：f = μ·N = ${f.toFixed(2)} N</div>`);
+                // Fx - f = ma => Fx = ma + f => F = (ma + f) / cosθ
+                const Fx_needed = m * a + f;
+                const F_needed = Fx_needed / cosT;
+                steps.push(`<div class="step">4. 逆推水平力：Fx = ma + f = ${Fx_needed.toFixed(2)} N</div>`);
+                steps.push(`<div class="step">5. 逆推总外力：F = Fx / cosθ = <strong>${F_needed.toFixed(2)} N</strong></div>`);
+                answer = `所需外力 F = ${F_needed.toFixed(2)} N`;
+
+            } else if (target === 'mu') {
+                const a = parseFloat(document.getElementById('acc').value);
+                if (isNaN(a)) { alert("请填入加速度！"); return; }
+                // Fx - μN = ma => μ = (Fx - ma) / N
+                const mu = (Fx - m * a) / N;
+                steps.push(`<div class="step">3. 逆推摩擦系数：ΣF = Fx - f = ma => f = Fx - ma</div>`);
+                steps.push(`<div class="step">4. μ = f / N = (Fx - ma) / N = <strong>${mu.toFixed(4)}</strong></div>`);
+                answer = `动摩擦系数 μ = ${mu.toFixed(4)}`;
+            }
+        }
+
+        // 渲染结果
+        const resultDiv = document.getElementById('result');
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = `
+            <h2>🎯 最终答案：${answer}</h2>
+            <hr style="border:0; border-top:1px solid #cbd5e1; margin: 15px 0;">
+            <h3>📝 详细解题过程：</h3>
+            ${steps.join('')}
+        `;
+    }
+
+    // 初始化界面
+    updateUI();
+</script>
+
+</body>
+</html>

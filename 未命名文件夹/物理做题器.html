@@ -1,0 +1,299 @@
+<script>
+    // --- 界面交互逻辑 (保持不变) ---
+    const surfaceSelect = document.getElementById('surfaceType');
+    const inclineParams = document.getElementById('inclineParams');
+    const extraForcesContainer = document.getElementById('extra-forces-container');
+    let extraForceCount = 0;
+
+    // 切换斜面参数显示
+    surfaceSelect.addEventListener('change', function() {
+        if (this.value === 'incline') {
+            inclineParams.style.display = 'block';
+        } else {
+            inclineParams.style.display = 'none';
+        }
+    });
+
+    // 添加额外力
+    function addExtraForce() {
+        extraForceCount++;
+        const div = document.createElement('div');
+        div.className = 'force-row';
+        div.id = `force-row-${extraForceCount}`;
+        div.innerHTML = `
+            <div class="input-group">
+                <label>额外力 ${extraForceCount} (N)</label>
+                <input type="number" class="extra-mag" placeholder="例: 10">
+            </div>
+            <div class="input-group">
+                <label>角度 (度)</label>
+                <input type="number" class="extra-angle" placeholder="与运动方向夹角">
+            </div>
+            <button class="remove-btn" onclick="removeForce(this)">×</button>
+        `;
+        extraForcesContainer.appendChild(div);
+        extraForcesContainer.style.display = 'block';
+    }
+
+    // 移除额外力
+    function removeForce(btn) {
+        btn.parentElement.remove();
+        if (document.querySelectorAll('.force-row').length === 0) {
+            extraForcesContainer.style.display = 'none';
+        }
+    }
+
+    // --- 核心计算逻辑 (已深度修改以支持无质量计算) ---
+    function calculatePhysics() {
+        // 1. 获取基础数据
+        let m_val = document.getElementById('mass').value;
+        let m = parseFloat(m_val);
+        let isMassUnknown = isNaN(m) || m_val === ""; // 标记质量是否未知
+
+        // 如果质量未知，为了后续计算不报错，暂时设为1 (但在物理逻辑中会特殊处理)
+        if (isMassUnknown) m = 1; 
+
+        let a_acc_input = document.getElementById('acc').value; // 用户指定的加速度(如有)
+        let a_given = !isNaN(parseFloat(a_acc_input)) ? parseFloat(a_acc_input) : null;
+
+        let g = 9.8;
+        let theta_deg = parseFloat(document.getElementById('angle').value) || 0;
+        let theta_rad = theta_deg * Math.PI / 180;
+        
+        let isHorizontal = (document.getElementById('surfaceType').value === 'horizontal');
+        let solveTarget = document.getElementById('solveTarget').value;
+
+        // 主动力 F
+        let F_mag = parseFloat(document.getElementById('forceMag').value) || 0;
+        let F_angle_deg = parseFloat(document.getElementById('forceAngle').value) || 0;
+        let F_angle_rad = F_angle_deg * Math.PI / 180;
+
+        let mu = parseFloat(document.getElementById('mu').value);
+        if (isNaN(mu)) mu = 0;
+
+        // 获取额外力
+        let extraForces = [];
+        document.querySelectorAll('.force-row').forEach(row => {
+            let mag = parseFloat(row.querySelector('.extra-mag').value) || 0;
+            let ang = parseFloat(row.querySelector('.extra-angle').value) || 0;
+            if (mag !== 0) extraForces.push({ mag: mag, rad: ang * Math.PI / 180 });
+        });
+
+        // 运动学变量
+        let v0 = parseFloat(document.getElementById('v0').value) || 0;
+        let t_or_x_val = parseFloat(document.getElementById('kinematicVal').value);
+        let kinematicType = document.getElementById('kinematicType').value; // 'displacement' or 'time'
+        let isGivenTime = (kinematicType === 'time');
+
+        // 结果容器
+        let processLog = [];
+        let finalResult = {};
+        let showMassWarning = false; // 是否显示“质量已约去”的提示
+
+        // --- 开始物理分析 ---
+
+        // 情况 A: 用户直接给了加速度 (最简单)
+        if (a_given !== null) {
+            finalResult.a = a_given;
+            processLog.push(`已知加速度 a = ${a_given} m/s²`);
+            
+            // 如果此时要求解力 F 或 mu，且没有 m，则无法求解具体数值
+            if (isMassUnknown && (solveTarget === 'force' || solveTarget === 'mu')) {
+                alert("错误：若要反求具体的力(N)或摩擦系数，且加速度由外力决定，必须知道质量 m。");
+                return;
+            }
+        } 
+        // 情况 B: 需要动力学计算 (牛顿第二定律)
+        else {
+            // 判断是否为“纯重力驱动且无质量”的特殊情况
+            // 条件：水平面为假(即斜面) + 主动力为0 + 无额外力 + 质量未知
+            let isGravityDriveNoMass = (!isHorizontal && F_mag === 0 && extraForces.length === 0 && isMassUnknown);
+
+            if (isGravityDriveNoMass) {
+                // *** 特殊算法：符号运算 ***
+                processLog.push("<strong>[特殊模式]</strong> 未输入质量 m，且仅受重力/摩擦力作用。");
+                processLog.push("程序将使用公式 a = g(sinθ - μcosθ) 进行计算，质量 m 已被约去。");
+                showMassWarning = true;
+
+                // 1. 计算加速度
+                // 下滑分力加速度分量: g*sinθ
+                let a_gravity_comp = g * Math.sin(theta_rad);
+                // 摩擦力产生的减速度分量: μ*g*cosθ
+                let a_friction_comp = mu * g * Math.cos(theta_rad);
+                
+                // 合力加速度
+                let a_net = a_gravity_comp - a_friction_comp;
+                
+                processLog.push(`重力沿斜面分量产生的加速度项: g·sin(${theta_deg}°) ≈ ${a_gravity_comp.toFixed(3)} m/s²`);
+                processLog.push(`摩擦力产生的减速度项: μ·g·cos(${theta_deg}°) ≈ ${a_friction_comp.toFixed(3)} m/s²`);
+
+                // 判断静止
+                if (a_net <= 0) {
+                    finalResult.a = 0;
+                    finalResult.status = "物体静止或匀速(若初速度不为0)，摩擦力足以平衡重力分量。";
+                    processLog.push("结论：重力下滑分量 <= 最大静摩擦力，物体无法加速下滑。");
+                } else {
+                    finalResult.a = a_net;
+                    processLog.push(`计算得加速度 a = ${a_net.toFixed(3)} m/s²`);
+                }
+
+                // 在这种模式下，我们无法算出具体的 N 和 f (牛顿)，只能算出比值或加速度
+                // 为了界面显示，我们可以显示“单位质量的力”或者显示公式
+                finalResult.N_formula = "m·g·cosθ (具体值取决于m)";
+                finalResult.f_formula = "μ·m·g·cosθ (具体值取决于m)";
+
+            } else {
+                // *** 常规算法：已知质量 或 有外力 F ***
+                
+                // 1. 力的分解
+                let F_parallel = F_mag * Math.cos(F_angle_rad);
+                let F_perp = F_mag * Math.sin(F_angle_rad); // 这里的垂直是指垂直于运动方向
+                
+                // 额外力分解
+                let F_extra_parallel = 0;
+                let F_extra_perp = 0; // 假设额外力都在运动平面内
+                extraForces.forEach(f => {
+                    F_extra_parallel += f.mag * Math.cos(f.rad);
+                    F_extra_perp += f.mag * Math.sin(f.rad);
+                });
+
+                let total_F_parallel = F_parallel + F_extra_parallel;
+                let total_F_perp = F_perp + F_extra_perp;
+
+                processLog.push(`主动力平行分量: ${F_parallel.toFixed(2)} N`);
+                
+                // 2. 计算支持力 N
+                let N = 0;
+                if (isHorizontal) {
+                    // 水平面: N + F_up = mg -> N = mg - F_up (假设F向上为正，这里简化处理，假设F_angle是与水平夹角)
+                    // 严谨点：如果F斜向上拉，F_perp向上。
+                    // 这里假设 input angle 是与运动方向夹角。如果是水平面，垂直分量就是 F*sin(a)
+                    // 通常题目里拉力斜向上会减小N。
+                    N = m * g - total_F_perp; 
+                } else {
+                    // 斜面: N = mg*cosθ - F_perp (假设F是拉着物体离开斜面方向为正，需根据具体题意，这里简化为代数叠加)
+                    // 标准斜面模型：重力垂直分量压向斜面 mg*cosθ。外力F如果有垂直斜面分量，会改变N。
+                    // 这里简化逻辑：N = mg*cosθ (忽略外力对N的影响，除非做非常复杂的3D分解，通常高中物理题F平行于斜面或水平)
+                    // 修正：为了兼容题目图示，假设F平行于斜面(angle=0)，则不影响N。
+                    N = m * g * Math.cos(theta_rad) - total_F_perp; 
+                }
+
+                if (N < 0) N = 0; // 物体飞离表面
+
+                // 3. 摩擦力
+                let f_k = mu * N;
+                processLog.push(`支持力 N = ${N.toFixed(2)} N`);
+                processLog.push(`滑动摩擦力 f = μN = ${f_k.toFixed(2)} N`);
+
+                // 4. 牛顿第二定律求 a
+                // ΣF = F_drive - f_friction
+                // 注意方向：如果是求a，假设运动方向为正。
+                // 如果是重力驱动(m已知)，则驱动力还要加上 mg*sinθ
+                
+                let F_gravity_parallel = 0;
+                if (!isHorizontal) {
+                    F_gravity_parallel = m * g * Math.sin(theta_rad);
+                    processLog.push(`重力沿斜面下滑分力: ${F_gravity_parallel.toFixed(2)} N`);
+                }
+
+                let F_total_drive = total_F_parallel + F_gravity_parallel;
+                let F_net = F_total_drive - f_k;
+
+                let a_calc = F_net / m;
+                
+                // 简单的静止判断 (如果是从静止开始)
+                if (v0 === 0 && F_net <= 0) {
+                     finalResult.a = 0;
+                     finalResult.status = "动力不足以克服摩擦力，物体保持静止。";
+                } else {
+                    finalResult.a = a_calc;
+                }
+                
+                // 记录常规数据用于展示
+                finalResult.N = N;
+                finalResult.f = f_k;
+            }
+        }
+
+        // --- 运动学计算 ---
+        let a = finalResult.a;
+        
+        // 如果求时间 t (已知位移 x)
+        if (solveTarget === 'time' || (isGivenTime === false && !isNaN(t_or_x_val))) {
+             let x = t_or_x_val; // 这里假设输入的是位移
+             // x = v0*t + 0.5*a*t^2
+             // 0.5*a*t^2 + v0*t - x = 0
+             // 求根公式
+             if (a === 0) {
+                 if (v0 > 0) {
+                     finalResult.t = x / v0;
+                 } else {
+                     finalResult.t = "无穷大 (物体不动)";
+                 }
+             } else {
+                 let delta = v0*v0 - 4 * (0.5*a) * (-x);
+                 if (delta >= 0) {
+                     let t1 = (-v0 + Math.sqrt(delta)) / (2 * 0.5 * a);
+                     let t2 = (-v0 - Math.sqrt(delta)) / (2 * 0.5 * a);
+                     // 取正数解
+                     finalResult.t = (t1 > 0) ? t1 : t2;
+                 } else {
+                     finalResult.t = "无解 (无法到达该位移)";
+                 }
+             }
+             // 顺便算末速度
+             finalResult.v_final = v0 + a * finalResult.t;
+        }
+        
+        // 如果求位移 x (已知时间 t)
+        else if (solveTarget === 'displacement' || (isGivenTime === true && !isNaN(t_or_x_val))) {
+            let t = t_or_x_val;
+            let x = v0 * t + 0.5 * a * t * t;
+            finalResult.x = x;
+            finalResult.v_final = v0 + a * t;
+        }
+
+        // --- 渲染结果 ---
+        displayResults(finalResult, processLog, showMassWarning);
+    }
+
+    function displayResults(res, logs, showMassWarning) {
+        const container = document.getElementById('result-container');
+        const content = document.getElementById('result-content');
+        
+        container.style.display = 'block';
+        
+        let html = `<div class="log-box">`;
+        
+        // 顶部警告
+        if (showMassWarning) {
+            html += `<div style="background:#fff3cd; color:#856404; padding:10px; border-radius:5px; margin-bottom:10px;">
+                <strong>提示：</strong>由于未输入质量，本题采用“质量约去法”计算。
+                <br>加速度结果是准确的，但具体的力（牛顿）无法计算。
+            </div>`;
+        }
+
+        // 主要结果
+        html += `<h3>计算结果</h3>`;
+        html += `<p><strong>加速度 a:</strong> ${typeof res.a === 'number' ? res.a.toFixed(3) : res.a} m/s²</p>`;
+        
+        if (res.N !== undefined) html += `<p><strong>支持力 N:</strong> ${res.N.toFixed(2)} N</p>`;
+        if (res.f !== undefined) html += `<p><strong>摩擦力 f:</strong> ${res.f.toFixed(2)} N</p>`;
+        
+        if (res.t !== undefined) html += `<p><strong>所需时间 t:</strong> ${typeof res.t === 'number' ? res.t.toFixed(3) : res.t} s</p>`;
+        if (res.x !== undefined) html += `<p><strong>位移 x:</strong> ${res.x.toFixed(3)} m</p>`;
+        if (res.v_final !== undefined) html += `<p><strong>末速度 v:</strong> ${res.v_final.toFixed(3)} m/s</p>`;
+
+        // 过程日志
+        html += `<hr><h4>解题步骤：</h4><ul>`;
+        logs.forEach(log => {
+            html += `<li>${log}</li>`;
+        });
+        html += `</ul></div>`;
+
+        content.innerHTML = html;
+        
+        // 滚动到底部
+        container.scrollIntoView({behavior: "smooth"});
+    }
+</script>
