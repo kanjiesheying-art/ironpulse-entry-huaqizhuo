@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>物理全能解题助手 V6.0 - 自定义受力版</title>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --bg-color: #f5f7fa;
+            --card-bg: #ffffff;
+            --text-color: #333;
+            --border-color: #e1e4e8;
+            --success-color: #2ecc71;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            padding: 30px;
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--primary-color);
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+
+        .section-title {
+            font-weight: bold;
+            margin-bottom: 15px;
+            border-left: 4px solid var(--primary-color);
+            padding-left: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* 表单样式 */
+        .form-group {
+            margin-bottom: 20px;
+            background: #fafbfc;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .input-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .input-item {
+            flex: 1;
+            min-width: 150px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        input[type="number"], select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+        }
+
+        /* 按钮样式 */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+            width: 100%;
+            font-size: 18px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+
+        .btn-primary:hover {
+            background-color: #357abd;
+        }
+
+        .btn-secondary {
+            background-color: #e1e4e8;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background-color: #d1d5da;
+        }
+
+        .btn-danger {
+            background-color: #ffeded;
+            color: #d9363e;
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
+        /* 结果区域样式 */
+        #result-area {
+            margin-top: 40px;
+            display: none;
+            animation: fadeIn 0.5s;
+        }
+
+        .result-card {
+            background: #f0f9ff;
+            border: 1px solid #bde0fe;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .final-answer {
+            text-align: center;
+            font-size: 28px;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin: 10px 0;
+        }
+
+        .step-block {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px dashed #ccc;
+        }
+
+        .step-title {
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 8px;
+        }
+
+        .math-line {
+            font-family: "Courier New", Courier, monospace;
+            background: #fff;
+            padding: 8px;
+            border-radius: 4px;
+            margin: 4px 0;
+            border-left: 3px solid #ddd;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .force-item-wrapper {
+            position: relative;
+            border-left: 3px solid transparent;
+        }
+        .force-item-wrapper.active-force {
+            border-left-color: var(--primary-color);
+            background: #fff;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>物理全能解题助手 V6.0</h1>
+
+    <!-- 基础参数设置 -->
+    <div class="section-title">基础环境参数</div>
+    <div class="form-group">
+        <div class="input-row">
+            <div class="input-item">
+                <label>物体质量 m (kg)</label>
+                <input type="number" id="mass" value="1" step="0.1">
+            </div>
+            <div class="input-item">
+                <label>动摩擦因数 μ</label>
+                <input type="number" id="mu" value="0.3" step="0.01">
+            </div>
+            <div class="input-item">
+                <label>位移 x (m) (可选)</label>
+                <input type="number" id="displacement" value="1.5" step="0.1">
+            </div>
+        </div>
+    </div>
+
+    <!-- 主动力设置 -->
+    <div class="section-title">
+        主动力 F1 (已知力)
+        <button class="btn btn-secondary" onclick="addForceInput()">+ 添加另一个分解力</button>
+    </div>
+    
+    <div id="forces-container">
+        <!-- 默认的主动力输入框 -->
+        <div class="form-group force-item-wrapper active-force" id="force-1">
+            <div class="input-row">
+                <div class="input-item">
+                    <label>力的大小 F (N)</label>
+                    <input type="number" class="force-val" value="9.8" step="0.1">
+                </div>
+                <div class="input-item">
+                    <label>角度 α (度)</label>
+                    <input type="number" class="force-angle" value="24" step="1">
+                </div>
+                <div class="input-item">
+                    <label>力的方向 (关键)</label>
+                    <select class="force-dir">
+                        <option value="up">斜向上 (拉力/提拉) - 减小压力</option>
+                        <option value="down">斜向下 (推力/按压) - 增加压力</option>
+                    </select>
+                </div>
+            </div>
+            <div style="font-size: 12px; color: #888; margin-top: 5px;">
+                * 选择“斜向上”时，垂直分力向上，支持力 N = mg - Fy<br>
+                * 选择“斜向下”时，垂直分力向下，支持力 N = mg + Fy
+            </div>
+        </div>
+    </div>
+
+    <button class="btn btn-primary" onclick="calculate()">开始计算并生成过程</button>
+
+    <!-- 结果展示区 -->
+    <div id="result-area">
+        <div class="result-card">
+            <div style="text-align: center; color: #666;">最终答案 (加速度 a)</div>
+            <div class="final-answer" id="res-acc">0.00 m/s²</div>
+        </div>
+
+        <div class="section-title">解题过程推导：</div>
+        <div id="steps-output" style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #eee;">
+            <!-- 动态生成的内容 -->
+        </div>
+    </div>
+</div>
+
+<script>
+    let forceCount = 1;
+
+    // 添加新的力输入框
+    function addForceInput() {
+        forceCount++;
+        const container = document.getElementById('forces-container');
+        const div = document.createElement('div');
+        div.className = 'form-group force-item-wrapper';
+        div.id = `force-${forceCount}`;
+        div.innerHTML = `
+            <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                <strong>附加力 F${forceCount}</strong>
+                <button class="btn btn-danger" onclick="removeForce(${forceCount})">删除此力</button>
+            </div>
+            <div class="input-row">
+                <div class="input-item">
+                    <label>力的大小 F (N)</label>
+                    <input type="number" class="force-val" value="0" step="0.1">
+                </div>
+                <div class="input-item">
+                    <label>角度 α (与水平夹角)</label>
+                    <input type="number" class="force-angle" value="0" step="1">
+                </div>
+                <div class="input-item">
+                    <label>力的方向</label>
+                    <select class="force-dir">
+                        <option value="up">斜向上 (减小压力)</option>
+                        <option value="down">斜向下 (增加压力)</option>
+                        <option value="horizontal">纯水平 (无垂直分量)</option>
+                    </select>
+                </div>
+            </div>
+        `;
+        container.appendChild(div);
+    }
+
+
+    // 删除力输入框
+    function removeForce(id) {
+        const el = document.getElementById('force-' + id);
+        if(el) el.remove();
+    }
+
+    // 核心计算逻辑
+    function calculate() {
+        // 1. 获取基础数据
+        const m = parseFloat(document.getElementById('mass').value) || 0;
+        const mu = parseFloat(document.getElementById('mu').value) || 0;
+        const x = parseFloat(document.getElementById('displacement').value) || 0;
+        const g = 9.8;
+
+        if (m <= 0) {
+            alert('请输入有效的质量！');
+            return;
+        }
+
+        // 2. 遍历所有力进行分解
+        const forceInputs = document.querySelectorAll('.force-item-wrapper');
+        let totalFx = 0;
+        let totalFy_external = 0;
+        let stepsHtml = '';
+
+        stepsHtml += '<div class="step-block"><div class="step-title">【第一步：力的分解】</div>';
+
+        forceInputs.forEach((wrapper, index) => {
+            if (!wrapper.querySelector('.force-val')) return;
+
+            const fVal = parseFloat(wrapper.querySelector('.force-val').value) || 0;
+            const angleDeg = parseFloat(wrapper.querySelector('.force-angle').value) || 0;
+            const direction = wrapper.querySelector('.force-dir').value;
+
+            if (fVal === 0) return;
+
+            const angleRad = angleDeg * Math.PI / 180;
+            const fx = fVal * Math.cos(angleRad);
+            const fy = fVal * Math.sin(angleRad);
+
+            let fy_effect = 0;
+            let dirText = '';
+            
+            if (direction === 'up') {
+                fy_effect = fy;
+                dirText = '斜向上';
+            } else if (direction === 'down') {
+                fy_effect = -fy;
+                dirText = '斜向下';
+            } else {
+                fy_effect = 0;
+                dirText = '水平方向';
+            }
+
+            totalFx += fx;
+            totalFy_external += fy_effect;
+
+            stepsHtml += '<div style="margin-bottom:10px; border-left:3px solid #ddd; padding-left:10px;">';
+            stepsHtml += '<strong>力 F' + (index+1) + ' (' + fVal + 'N, ' + angleDeg + '°,' + dirText + '):</strong><br>';
+            stepsHtml += '<div class="math-line">水平分量 Fx' + (index+1) + ' = ' + fVal + ' × cos(' + angleDeg + '°) = ' + fx.toFixed(2) + ' N</div>';
+            stepsHtml += '<div class="math-line">垂直分量 Fy' + (index+1) + ' = ' + fVal + ' × sin(' + angleDeg + '°) = ' + Math.abs(fy).toFixed(2) + ' N (' + (direction === 'down' ? '向下压' : '向上提') + ')</div>';
+            stepsHtml += '</div>';
+        });
+        stepsHtml += '</div>';
+
+        let N = (m * g) - totalFy_external;
+        if (N < 0) N = 0;
+
+        const f_friction = mu * N;
+
+        stepsHtml += '<div class="step-block">';
+        stepsHtml += '<div class="step-title">【第二步：求支持力 N 与摩擦力 f】</div>';
+        stepsHtml += '<div class="math-line">重力 G = mg = ' + m + ' × 9.8 = ' + (m*g).toFixed(2) + ' N</div>';
+        stepsHtml += '<div class="math-line">垂直方向受力平衡：N = G - (向上的外力总和) + (向下的外力总和)</div>';
+        stepsHtml += '<div class="math-line">N = ' + (m*g).toFixed(2) + ' - (' + totalFy_external.toFixed(2) + ') = ' + N.toFixed(2) + ' N</div>';
+        stepsHtml += '<div class="math-line" style="color:#d9363e">滑动摩擦力 f = μN = ' + mu + ' × ' + N.toFixed(2) + ' = ' + f_friction.toFixed(2) + ' N</div>';
+        stepsHtml += '</div>';
+
+        let F_net = totalFx - f_friction;
+        const a = F_net / m;
+
+        stepsHtml += '<div class="step-block">';
+        stepsHtml += '<div class="step-title">【第三步：牛顿第二定律求解加速度】</div>';
+        stepsHtml += '<div class="math-line">水平合外力 F_net = ΣFx - f = ' + totalFx.toFixed(2) + ' - ' + f_friction.toFixed(2) + ' = ' + F_net.toFixed(2) + ' N</div>';
+        stepsHtml += '<div class="math-line" style="color:#d9363e; font-weight:bold;">加速度 a = F_net / m = ' + F_net.toFixed(2) + ' / ' + m + ' = ' + a.toFixed(2) + ' m/s²</div>';
+        stepsHtml += '</div>';
+
+        if (x > 0) {
+            const v0 = 0;
+            const v_final = Math.sqrt(v0*v0 + 2*a*x);
+            const t = (v_final - v0) / a;
+
+            stepsHtml += '<div class="step-block">';
+            stepsHtml += '<div class="step-title">【第四步：运动学公式求解（已知位移）】</div>';
+            stepsHtml += '<div class="math-line">假设初速度 v₀ = 0 m/s</div>';
+            stepsHtml += '<div class="math-line">由 v² = v₀² + 2ax 得：</div>';
+            stepsHtml += '<div class="math-line">末速度 v = √(0 + 2 × ' + a.toFixed(2) + ' × ' + x + ') = ' + v_final.toFixed(2) + ' m/s</div>';
+            stepsHtml += '<div class="math-line">运动时间 t = v / a = ' + v_final.toFixed(2) + ' / ' + a.toFixed(2) + ' = ' + t.toFixed(2) + ' s</div>';
+            stepsHtml += '</div>';
+        }
+
+        // 更新最终答案显示
+        document.getElementById('res-acc').textContent = a.toFixed(2) + ' m/s²';
+        
+        // 更新解题过程
+        document.getElementById('steps-output').innerHTML = stepsHtml;
+        
+        // 显示结果区域
+        document.getElementById('result-area').style.display = 'block';
+
+        // 返回值汇总
+        let resultDetails = '<div class="section-title">计算返回值汇总：</div>';
+        resultDetails += '<div style="background:#fff; padding:20px; border-radius:8px; border:1px solid #eee; margin-bottom:20px;">';
+        resultDetails += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">';
+        resultDetails += '<div class="result-card" style="margin:0;"><div style="color:#666; font-size:14px;">支持力 N</div><div style="font-size:20px; font-weight:bold; color:var(--primary-color);">' + N.toFixed(2) + ' N</div></div>';
+        resultDetails += '<div class="result-card" style="margin:0;"><div style="color:#666; font-size:14px;">摩擦力 f</div><div style="font-size:20px; font-weight:bold; color:#d9363e;">' + f_friction.toFixed(2) + ' N</div></div>';
+        resultDetails += '<div class="result-card" style="margin:0;"><div style="color:#666; font-size:14px;">水平合力 ΣFx</div><div style="font-size:20px; font-weight:bold; color:var(--primary-color);">' + totalFx.toFixed(2) + ' N</div></div>';
+        resultDetails += '<div class="result-card" style="margin:0;"><div style="color:#666; font-size:14px;">合外力 F_net</div><div style="font-size:20px; font-weight:bold; color:var(--primary-color);">' + F_net.toFixed(2) + ' N</div></div>';
+        resultDetails += '</div>';
+
+        if (x > 0) {
+            const v0 = 0;
+            const v_final = Math.sqrt(v0*v0 + 2*a*x);
+            const t = (v_final - v0) / a;
+            resultDetails += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-top:15px;">';
+            resultDetails += '<div class="result-card" style="margin:0;"><div style="color:#666; font-size:14px;">末速度 v</div><div style="font-size:20px; font-weight:bold; color:var(--success-color);">' + v_final.toFixed(2) + ' m/s</div></div>';
+            resultDetails += '<div class="result-card" style="margin:0;"><div style="color:#666; font-size:14px;">运动时间 t</div><div style="font-size:20px; font-weight:bold; color:var(--success-color);">' + t.toFixed(2) + ' s</div></div>';
+            resultDetails += '</div>';
+        }
+
+        resultDetails += '<div style="margin-top:15px; padding:10px; background:#f0f9ff; border-radius:6px; border-left:3px solid var(--primary-color);"><strong>参数汇总：</strong>质量 m = ' + m + ' kg | 摩擦因数 μ = ' + mu + ' | 位移 x = ' + x + ' m | 重力加速度 g = 9.8 m/s²</div>';
+        resultDetails += '</div>';
+
+        // 插入返回值汇总到解题过程之前
+        const stepsOutput = document.getElementById('steps-output');
+        const resultArea = document.getElementById('result-area');
+        
+        let summaryDiv = document.getElementById('result-summary');
+        if (!summaryDiv) {
+            summaryDiv = document.createElement('div');
+            summaryDiv.id = 'result-summary';
+            resultArea.insertBefore(summaryDiv, stepsOutput);
+        }
+        summaryDiv.innerHTML = resultDetails;
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('物理全能解题助手 V6.0 已加载');
+    });
+</script>
+</body>
+</html>
